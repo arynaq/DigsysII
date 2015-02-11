@@ -1,0 +1,25 @@
+#include <stdio.h>
+
+void eksempel1(void);
+void eksempel2(void);
+
+
+int main(void){
+  float tmp;
+  scanf("%f", &tmp);
+  harFeber(tmp);
+  printf("This is a test!");
+  return 0;
+}
+
+void eksempel1(void){
+}
+
+void eksempel2(void){
+}
+
+
+void harFeber(float temp){
+  if(temp<=37.0)
+    printf("Du er frisk  else if(temp >=38
+}

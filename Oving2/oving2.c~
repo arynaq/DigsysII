@@ -1,0 +1,30 @@
+#include <stdio.h>
+#include <math.h>
+
+void secondDegPolyRoot(void);
+
+
+int main(int argc, char** argv){
+
+  secondDegPolyRoot();
+  return 0;
+}
+
+/**
+Finds the roots of a second degree polynomial
+*/
+
+void secondDegPolyRoot(void){
+  double a; double b; double c;
+  double x1; double x2;
+
+  printf("\n Finds the roots of a polynomial in the form ax**2 + bx + c");
+
+  printf("\n Enter a: "); scanf("%lf", a);
+  printf("\n Enter b: "); scanf("%lf", b);
+  printf("\n Enter c: "); scanf("%lf", c);
+
+  
+}
+
+

@@ -1,0 +1,43 @@
+#include <math.h>
+#include <stdio.h>
+
+void oppgave1(void);
+int factorial(int);
+float areal(float, float, float);
+int commonDivisor(int,int, int);
+
+
+int main(int argc, char** argv){
+  commonDivisor(6556, 6875, 2);
+  return 0;1
+}
+
+
+int commonDivisor(int a, int b, int div){
+  printf("\n%d\n", div);
+
+  if(
+    
+  return 0;
+}
+
+
+float areal(float s1, float s2, float s3){
+  float s = (s1+s2+s3)/2;
+  float a = sqrt(s*(s-s1)*(s-s2)*(s-s3));
+  return a;
+}
+
+
+int factorial(int a){
+  if(a==1)
+    return 1;
+  return a*factorial(a-1);
+}
+
+void oppgave1(void){
+  printf("\n%10s %10s %10s", "i", "i*i", "i*i*i\n");
+  for(int i=1; i<=10; i++){
+    printf("\n %10d %10d %10d", i, i*i, i*i*i);
+  }
+}

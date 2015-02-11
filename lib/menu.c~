@@ -1,0 +1,24 @@
+#include <stdio.h>
+#include <menu.h>
+
+
+
+int main(int argc, char** argv){
+}
+
+
+void listMenu(int numberOfItems, char** menu){
+  int n= numberOfItems;
+  
+  for(int i=0; i<n; i++){
+    printf("\n");printf(menu[i]);
+  }
+
+  
+
+  
+}
+
+
+
+
