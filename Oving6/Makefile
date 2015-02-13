@@ -5,7 +5,7 @@ OBJ = oving6
 
 all: $(OBJ)
 
-oving5:
+oving6:
 	$(GPP) $(GPPOPT) $(OBJ).c -o $@
 clean:
 	-$(RM) $(OBJ)
