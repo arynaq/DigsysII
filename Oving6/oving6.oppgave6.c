@@ -7,7 +7,6 @@ int main(int argc, char** argv){
 	srand(time(NULL));
 
 	int rain[12][31] = {{0}};
-	int daysWithRaind
 
 	for(int i=0; i<12; i++){
 		for(int j=0; j<31; j++){
