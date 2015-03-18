@@ -1,0 +1,6 @@
+xbee rf module arduino?
+
+
+ZigBee module, XB24-Z7UIT-004 (1 for arduino, X for X potter)
+SparkFun XBee Explorer USB https://www.sparkfun.com/products/11812
+SparkFun XBee Arduino Skjold https://www.sparkfun.com/products/12847
