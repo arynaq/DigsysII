@@ -1,0 +1,9 @@
+Accelerometer / Gyro - https://www.sparkfun.com/products/11028 $(39.95)
+ATMEGA MCU https://www.sparkfun.com/products/9061 ($4.30)
+Stativ - F450 Frame Kit - http://elefun.no/p/prod.aspx?v=22016 (Kr 335)
+Batteri - 3C 2200mAh - http://elefun.no/p/prod.aspx?v=25891 (159 kr)
+Propell
+	x2 Clockwise APC 10x4.5MR  http://www.elefun.no/p/prod.aspx?v=26508 35kr pr stykk
+	x2 Counterclockwise http://www.elefun.no/p/prod.aspx?v=26509 34 kr pr stykk
+	x1 APC Adapter Rings E http://www.elefun.no/p/prod.aspx?v=26518 39kr
+ESC -  x4 ESC http://www.elefun.no/p/prod.aspx?v=17467 (kr 185 per stykk)

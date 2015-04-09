@@ -95,5 +95,3 @@
 	###Pros
 		- Kult å kunne f.eks legge inn bildegjenkjenning (finnes verktøy for dette, trenger ikke å kode det fra scratch selv) 
 		  og få robotene til å søke i lag.
-##Lenker
-	- https://www.sparkfun.com/products/10534
