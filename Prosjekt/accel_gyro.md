@@ -31,3 +31,8 @@ Vi kan enten integrere denne opp (euler chrome, runge-kutta, euler) til å finne
 	- Dette for å jevne ut støy (random flux)
 	- Erfaring tilsier at akselerometeret (pga lineær sensor) er mer utsatt for støy
 	- Vekting slik at gyro stoles på mer.
+
+### Euler vs Quaternion
+
+	- Kan ikke bruke euler vinkler, pga noe som heter gimbal lock (google/yt/wiki please)
+	- Må bruke Quaternions
