@@ -5,6 +5,8 @@ class PID{
   float* setPoint;
   /* The current value */
   float* newPoint;
+  /* The previous value */
+  float* prevPoint;
   /* The difference between the two */
   float* error;
   /* The update rate of the PID
@@ -21,10 +23,10 @@ class PID{
 
 
 
-
-  float KI;
-  float KD;
-  float KP;
+  /*Default values for the algo coefficients */
+  float KI = 0.1;
+  float KD = 0.05;
+  float KP = 1;
 public:
   PID(float* s, float* n, float _samplerate){
     setPoint = s;
@@ -34,12 +36,36 @@ public:
 
   void update(){
     timer += millis();
-    *error = *newpoint - *setPoint;
+    *error = *setPoint - *newPoint;
     if(timer>=dt){
+
+      out = potential() + integrand() + derivative();
+
+
       sum+= error*dt;
       out = KP * (error) + KI*sum + KD*error/dt;
+
+      prevPoint = *newPoint;
       timer = 0;
     }
+  }
+
+  float potential(){
+    return KP*(error);
+  }
+
+  float derivative(){
+    /* This value will spike massively if the error is big since dt is small
+      but derror/dt = d(setpoint -newpoint)/dt but since the setpoint is constant
+      derror/dt = -dnewpint/dt
+    */
+
+    return -KD*(*newPoint-prevPoint)/dt;
+  }
+
+  float integrand(){
+    sum+= error*dt;
+    return KI*sum;
   }
 
   inline float getKI(){return KI;}
