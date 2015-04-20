@@ -7,31 +7,31 @@
     #include "Wire.h"
 #endif
 
+#define DEBUG
 
+/*
+Motor constants & values
+*/
+Servo front,right,back,left;
+#define MOTOR_FRONT_PIN 6 
+#define MOTOR_RIGHT_PIN 9
+#define MOTOR_BACK_PIN 10
+#define MOTOR_LEFT_PIN 11
+#define ESC_INIT_DELAY 500
 
-void initMPU(void);
-void initESCs(void);
-void initPID(void);
-
+/*
+MPU constants and values 
+*/
 MPU6050 mpu;
+#define MPU_CALIB_TIME 30000
 
-//#define OUTPUT_READABLE_QUATERNION
-//#define OUTPUT_READABLE_EULER
-#define OUTPUT_READABLE_YAWPITCHROLL
-//#define OUTPUT_READABLE_REALACCEL
-//#define OUTPUT_READABLE_WORLDACCEL
-//#define OUTPUT_TEAPOT
-
-
-// MPU control/status vars
 bool dmpReady = false;  // set true if DMP init was successful
+volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
 uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
 uint8_t devStatus;      // return status after each device operation (0 = success, !0 = error)
 uint16_t packetSize;    // expected DMP packet size (default is 42 bytes)
 uint16_t fifoCount;     // count of all bytes currently in FIFO
 uint8_t fifoBuffer[64]; // FIFO storage buffer
-
-// orientation/motion vars
 Quaternion q;           // [w, x, y, z]         quaternion container
 VectorInt16 aa;         // [x, y, z]            accel sensor measurements
 VectorInt16 aaReal;     // [x, y, z]            gravity-free accel sensor measurements
@@ -40,78 +40,105 @@ VectorFloat gravity;    // [x, y, z]            gravity vector
 float euler[3];         // [psi, theta, phi]    Euler angle container
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 
-// packet structure for InvenSense teapot demo
-uint8_t teapotPacket[14] = { '$', 0x02, 0,0, 0,0, 0,0, 0,0, 0x00, 0x00, '\r', '\n' };
+
+
+/*
+PID constants & values
+*/
+PID yaw; PID pitch; PID roll;
+
+float YAW_OUT;
+float YAW_SETPOINT;
+float YAW_KP = 1.0;
+float YAW_KD = 0.05;
+float YAW_KI = 0.1;
+
+float PITCH_OUT;
+float PITCH_SETPOINT;
+float PITCH_KP = 1.0;
+float PITCH_KD = 0.05;
+float PITCH_KI = 0.1;
+
+float ROLL_OUT;
+float ROLL_SETPOINT;
+float ROLL_KP = 1.0;
+float ROLL_KD = 0.05;
+float ROLL_KI = 01;
+
+float dt = 0.1;
 
 
 
-// ================================================================
-// ===               INTERRUPT DETECTION ROUTINE                ===
-// ================================================================
 
-volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
+
+void setup() {
+    initESCs();
+    initMPU();
+    initPID();
+}
+
+void loop() {
+    updateMPU();
+    updatePID();
+    updateESC();
+}
+
+
 void dmpDataReady() {
     mpuInterrupt = true;
 }
 
 
-//PIDS
-float yaw_0;
-float pitch_0;
-float roll_0;
 
-PID yaw = PID(&yaw_0, &ypr[0], 0.1);
-PID pitch = PID(&pitch_0, &ypr[1], 0.1);
-PID roll = PID(&roll_0, &ypr[2], 0.1);
+void initESCs(){
+    front.attach(MOTOR_FRONT_PIN);
+    right.attach(MOTOR_RIGHT_PIN)
+    back.attach(MOTOR_BACK_PIN);
+    left.attach(MOTOR_LEFT_PIN);
 
-bool pidsInitialized = false;
+    #if DEBUG =={
+        Serial.print("Calibrating the servors ");
+        Serial.print(ESC_MIN);
+        Serial.print(" is the minimum value. ");
+        Serial.print(ESC_frontX);
+        Serial.println(" is the maximum value.")
+    }
+
+    front.write(ESC_MIN);
+    right.write(ESC_MIN);
+    back.write(ESC_MIN);
+    left.write(ESC_MIN);
+    Serial.println("Done calibrating ESCs");
+    /*
+    Wait a little while, else we get bus collisions if we jump straight to
+    the MPU
+    */
+    delay(ESC_INIT_DELAY);
+}
 
 
-
-
-
-//Motors
-boolean calibrated = false;
-Servo m1,m2,m3,m4;
-
-
-void setup() {
-           
-    
-    //Setup motors
-    m1.attach(6);
-    m2.attach(9);
-    m3.attach(10);
-    m4.attach(11);
-    Serial.println("Calibrating the servos, 30 is min, 180 is max");
-    m1.write(30);
-    m2.write(30);
-    m3.write(30);
-    m4.write(30);
-    Serial.println("Calibration done");    
-    delay(500);
-
-    
-  
-  
-    
+void initMPU(){
     #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
         Wire.begin();
         TWBR = 24;
     #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
         Fastwire::setup(400, true);
     #endif
-    
-    Serial.begin(115200);
-    Serial.println(F("Initializing I2C devices..."));
-    
+
+    #ifdef DEBUG
+        Serial.begin(115200);
+        Serial.println(F("Initializing I2C devices..."));
+    #endif
     mpu.initialize();
 
-    Serial.println(F("Testing device connections..."));
-    Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
+    #ifdef DEBUG
+        Serial.println(F("Testing device connections..."));
+        Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") 
+            : F("MPU6050 connection failed"));
 
-    // load and configure the DMP
-    Serial.println(F("Initializing DMP..."));
+        Serial.println(F("Initializing DMP..."));
+    #endif
+
     devStatus = mpu.dmpInitialize();
 
     // supply your own gyro offsets here, scaled for min sensitivity
@@ -123,16 +150,23 @@ void setup() {
     // make sure it worked (returns 0 if so)
     if (devStatus == 0) {
         // turn on the DMP, now that it's ready
-        Serial.println(F("Enabling DMP..."));
+        #ifdef DEBUG
+            Serial.println(F("Enabling DMP..."));
+        #endif
         mpu.setDMPEnabled(true);
 
         // enable Arduino interrupt detection
-        Serial.println(F("Enabling interrupt detection (Arduino external interrupt 0)..."));
+        #ifdef DEBUG
+            Serial.println(F("Enabling interrupt detection (Arduino external interrupt 0)..."));
+        #endif 
+
         attachInterrupt(0, dmpDataReady, RISING);
         mpuIntStatus = mpu.getIntStatus();
 
         // set our DMP Ready flag so the main loop() function knows it's okay to use it
-        Serial.println(F("DMP ready! Waiting for first interrupt..."));
+        #ifdef DEBUG
+            Serial.println(F("DMP ready! Waiting for first interrupt..."));
+        #endif 
         dmpReady = true;
 
         // get expected DMP packet size for later comparison
@@ -142,22 +176,84 @@ void setup() {
         // 1 = initial memory load failed
         // 2 = DMP configuration updates failed
         // (if it's going to break, usually the code will be 1)
-        Serial.print(F("DMP Initialization failed (code "));
-        Serial.print(devStatus);
-        Serial.println(F(")"));
+        #ifdef DEBUG
+            Serial.print(F("DMP Initialization failed (code "));
+            Serial.print(devStatus);
+            Serial.println(F(")"));
+        #endif
     }
 
-    
-    
-    
+    /*
+    Calibrate the MPU, it needs to run for about 30 seconds in our application
+    Before it settles down, it starts off with big errors it needs time to
+    smooth out
+    */
+
+    long timer = millis();
+    while(millis()-timer < MPU_CALIB_TIME) updateMPU();
 }
 
-void loop() {
+
+
+
+/*
+Function is called after the MPU is calibrated, so at this time
+ypr[0] = yaw setpoint
+ypr[1] = pitch setpoint
+ypr[2] = roll setpoint
+*/
+void initPID(){
+    *YAW_SETPOINT = ypr[0];
+    *PITCH_SETPOINT = ypr[1];
+    *ROLL_SETPOINT = ypr[2];
+
+
+    yaw = PID(&YAW_OUT, &ypr[0], &YAW_SETPOINT, dt, YAW_KP, YAW_KI, YAW_KD);
+    pitch = PID(&PITCH_OUT, &ypr[1], &PITCH_SETPOINT, dt, PITCH_KP, PITCH_KI, PITCH_KD);
+    roll = PID(&ROLL_OUT, &ypr[2], &ROLL_SETPOINT, dt, ROLL_KP, ROLL_KI, ROLL_KD);
+
+    yaw.init();
+    pitch.init();
+    roll.init();
+}
+
+void updatePID(){
+    yaw.update();
+    pitch.update();
+    roll.update();
+}
+
+void updateESC(){
+    float front_new = PITCH_OUT - YAW_OUT;
+    float back_new = -PITCH_OUT - YAW_OUT;
+
+    float right_new = - ROLL_OUT + YAW_OUT;
+    float left_new = ROLL_OUT + YAW_OUT;
+
+
+    //front.write(front_new);
+    //back.write(back_new);
+    //left.write(right_new);
+    //right.write(left_new);
+
+
+    Serial.print("y,p,c,f,b,l,r: ");
+    Serial.print(YAW_OUT); Serial.print(",");
+    Serial.print(PITCH_OUT); Serial.print(",");
+    Serial.print(ROLL_OUT); Serial.print(",");
+    Serial.print(front_new); Serial.print(",");
+    Serial.print(back_new); Serial.print(",");
+    Serial.print(left_new); Serial.print(",");
+    Serial.println(right_new);      
+}
+
+
+
+
+void updateMPU(){
     if (!dmpReady) return;
-    
     while (!mpuInterrupt && fifoCount < packetSize) {
     }
-    
     mpuInterrupt = false;
     mpuIntStatus = mpu.getIntStatus();
     fifoCount = mpu.getFIFOCount();
@@ -166,7 +262,9 @@ void loop() {
     if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
         // reset so we can continue cleanly
         mpu.resetFIFO();
-        Serial.println(F("FIFO overflow!"));
+        #ifdef DEBUG
+            Serial.println(F("FIFO overflow!"));
+        #endif
 
     // otherwise, check for DMP data ready interrupt (this should happen frequently)
     } else if (mpuIntStatus & 0x02) {
@@ -180,195 +278,8 @@ void loop() {
         // (this lets us immediately read more without waiting for an interrupt)
         fifoCount -= packetSize;
         
-        
-        
-         
-        
-        
-          
-        #ifdef OUTPUT_READABLE_YAWPITCHROLL
-            // display Euler angles in degrees
-            mpu.dmpGetQuaternion(&q, fifoBuffer);
-            mpu.dmpGetGravity(&gravity, &q);
-            mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-            
-         
-         
-          
-          if(millis()<30000){
-            Serial.print("Waiting for stabilization, ");
-            Serial.print(0.001* (30000-millis()));
-            Serial.println("seconds left.");
-            return;
-          }
-          
-          if(pidsInitialized == false){
-            yaw_0 =  ypr[0];
-            pitch_0 = ypr[1];
-            roll_0 = ypr[2];
-            
-            pidsInitialized = true;
-         }
-         
-         
-          yaw.update();
-          pitch.update();
-          roll.update();
-        
-         
-          
-          
-          
-          
-           
-          float c_yaw = yaw.out();
-          float c_pitch = pitch.out();
-          float c_roll =  roll.out();
-          
-          
-          float motor1 = 65 - c_pitch - c_yaw;   //rear
-          float motor2 = 65 + c_roll  + c_yaw;   //left
-          float motor3 = 65 + c_pitch - c_yaw;   //front 
-          float motor4 = 65 - c_roll  + c_yaw;   //right
-          
-          
-          Serial.print("y,p,c,m1,m2,m3,m4: ");
-          Serial.print(c_yaw); Serial.print(",");
-          Serial.print(c_pitch); Serial.print(",");
-          Serial.print(c_roll); Serial.print(",");
-          Serial.print(motor1); Serial.print(",");
-          Serial.print(motor2); Serial.print(",");
-          Serial.print(motor3); Serial.print(",");
-          Serial.println(motor4);
-          
-          
-          m1.write(motor1);
-          m2.write(motor2);
-          m3.write(motor3);
-          m4.write(motor4);
-         
-          
-          
-          
-          /*
-          
-          if(motor1>=90) motor1 = 90;
-          if(motor1<=60) motor1 = 60;
-          
-          if(motor2>=90) motor2 = 90;
-          if(motor1<=60) motor2 = 60;
-          
-          if(motor3>=90) motor3 = 90;
-          if(motor3<=60) motor3 = 60;
-          
-          if(motor4>=90) motor4 = 90;
-          if(motor4<=60) motor4 = 60;
-          
-          */
-       
-        #endif
-        
-        
-
-        #ifdef OUTPUT_READABLE_QUATERNION
-            // display quaternion values in easy matrix form: w x y z
-            mpu.dmpGetQuaternion(&q, fifoBuffer);
-            
-            
-            //Serial.print("quat\t");
-            //Serial.print(q.w);
-            //Serial.print("\t");
-            //Serial.print(q.x);
-            //Serial.print("\t");
-            //Serial.print(q.y);
-            //Serial.print("\t");
-            //Serial.println(q.z);
-            //q13 = 2*(q.x*q.z - q.w*q.y);
-            //q23 = 2*(q.y*q.z + q.w*q.x);
-            //q33 = 1- (2*q.x*q.x) - 2*q.y*q.y;
-            
-            
-            /*Serial.println("BEFORE");
-            Serial.print("M1, M2, M3, M4: ");
-            Serial.print(m1); Serial.print(",");
-            Serial.print(m2); Serial.print(",");
-            Serial.print(m3); Serial.print(",");
-            Serial.println(m4);
-            
-            //m1 = m1 + 0.05*q13;
-            //m2 = m2 + 0.05*q23;
-            //m3 = m3 - 0.05*q13;
-            //m4 = m4 - 0.05*q23;
-            
-            Serial.println("AFTER");
-            Serial.print("M1, M2, M3, M4: ");
-            Serial.print(m1); Serial.print(",");
-            Serial.print(m2); Serial.print(",");
-            Serial.print(m3); Serial.print(",");
-            Serial.println(m4);
-            */
-            
-            
-        #endif
-
-        #ifdef OUTPUT_READABLE_EULER
-            // display Euler angles in degrees
-            mpu.dmpGetQuaternion(&q, fifoBuffer);
-            mpu.dmpGetEuler(euler, &q);
-            Serial.print("euler\t");
-            Serial.print(euler[0] * 180/M_PI);
-            Serial.print("\t");
-            Serial.print(euler[1] * 180/M_PI);
-            Serial.print("\t");
-            Serial.println(euler[2] * 180/M_PI);
-        #endif
-
-
-        #ifdef OUTPUT_READABLE_REALACCEL
-            // display real acceleration, adjusted to remove gravity
-            mpu.dmpGetQuaternion(&q, fifoBuffer);
-            mpu.dmpGetAccel(&aa, fifoBuffer);
-            mpu.dmpGetGravity(&gravity, &q);
-            mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
-            Serial.print("areal\t");
-            Serial.print(aaReal.x);
-            Serial.print("\t");
-            Serial.print(aaReal.y);
-            Serial.print("\t");
-            Serial.println(aaReal.z);
-        #endif
-
-        #ifdef OUTPUT_READABLE_WORLDACCEL
-            // display initial world-frame acceleration, adjusted to remove gravity
-            // and rotated based on known orientation from quaternion
-            mpu.dmpGetQuaternion(&q, fifoBuffer);
-            mpu.dmpGetAccel(&aa, fifoBuffer);
-            mpu.dmpGetGravity(&gravity, &q);
-            mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
-            mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);
-            Serial.print("aworld\t");
-            Serial.print(aaWorld.x);
-            Serial.print("\t");
-            Serial.print(aaWorld.y);
-            Serial.print("\t");
-            Serial.println(aaWorld.z);
-        #endif
-    
-        #ifdef OUTPUT_TEAPOT
-            // display quaternion values in InvenSense Teapot demo format:
-            teapotPacket[2] = fifoBuffer[0];
-            teapotPacket[3] = fifoBuffer[1];
-            teapotPacket[4] = fifoBuffer[4];
-            teapotPacket[5] = fifoBuffer[5];
-            teapotPacket[6] = fifoBuffer[8];
-            teapotPacket[7] = fifoBuffer[9];
-            teapotPacket[8] = fifoBuffer[12];
-            teapotPacket[9] = fifoBuffer[13];
-            Serial.write(teapotPacket, 14);
-            teapotPacket[11]++; // packetCount, loops at 0xFF on purpose
-        #endif
-        
+        mpu.dmpGetQuaternion(&q, fifoBuffer);
+        mpu.dmpGetGravity(&gravity, &q);
+        mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
     }
-    
-      
-    }
+}
