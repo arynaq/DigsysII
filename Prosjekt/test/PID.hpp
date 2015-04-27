@@ -155,8 +155,8 @@ private:
     since setpoint is a constant it vanishes
   */
   float derivative(){
-    return KD/dt * (error - prevError);
-    //return - KD/dt * (*newPoint - prevPoint);
+    //return KD/dt * (error - prevError);
+    return - KD/dt * (*newPoint - prevPoint);
   }
 
   /*
