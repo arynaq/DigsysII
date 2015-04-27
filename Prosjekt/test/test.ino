@@ -1,18 +1,14 @@
 #include "I2Cdev.h"
 #include <math.h>
 #include "PID.hpp"
-#include "subl
+#include "bluetoothserial.h"
 #include "MPU6050_6Axis_MotionApps20.h"
+#include "MPL3115A2.h"
+#include "filter.hpp"
 #include <Servo.h>
-#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
-    #include "Wire.h"
-#endif
+#include "Wire.h"
 
 #define DEBUG
-
-/*
-Motor constants & values
-*/
 #define MOTOR_FRONT_PIN 10 //M1
 #define MOTOR_RIGHT_PIN 9  //m2
 #define MOTOR_BACK_PIN 11 //M3
@@ -25,27 +21,14 @@ Motor constants & values
 #define ESC_MAX_PWM 2000
 #define ESC_MIN_VELOCITY ANGLE_TO_PWM(60)
 #define ESC_MAX_VELOCITY ANGLE_TO_PWM(100)
-
-Servo front,right,back,left;
-int velocity = ANGLE_TO_PWM(95);
-
-//MPL3115A2 pressure sensor
-#define MPL_SCL_PIN A2
-#define MPL_SDA_PIN A1
-
-/*
-MPU constants and values 
-*/
-MPU6050 mpu;
-/*Tar ca 30 sekunder før MPUen stabiliseres */
-#define MPU_CALIB_TIME 30000
-/*De offsettene her må vi måle selv, MPUen har innebygget feil */
 #define MPU_AX_OFFSET -46
 #define MPU_AY_OFFSET 1101
 #define MPU_AZ_OFFSET 2148
 #define MPU_GX_OFFSET 34
 #define MPU_GY_OFFSET -49
 #define MPU_GZ_OFFSET 9
+#define MPU_CALIB_TIME 30000
+
 
 bool dmpReady = false;  // set true if DMP init was successful
 volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
@@ -55,11 +38,7 @@ uint16_t packetSize;    // expected DMP packet size (default is 42 bytes)
 uint16_t fifoCount;     // count of all bytes currently in FIFO
 uint8_t fifoBuffer[64]; // FIFO storage buffer
 Quaternion q;           // [w, x, y, z]         quaternion container
-VectorInt16 aa;         // [x, y, z]            accel sensor measurements
-VectorInt16 aaReal;     // [x, y, z]            gravity-free accel sensor measurements
-VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measurements
 VectorFloat gravity;    // [x, y, z]            gravity vector
-float euler[3];         // [psi, theta, phi]    Euler angle container
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 
 
@@ -67,7 +46,6 @@ float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gra
 /*
 PID constants & values
 */
-PID* yaw; PID* pitch; PID* roll;
 
 float YAW_OUT;
 float YAW_SETPOINT;
@@ -87,22 +65,52 @@ float ROLL_KP = 0.1; //0.1
 float ROLL_KI = 0.0001; //0.0
 float ROLL_KD = 0.65; //0.75
 
+float THROTTLE_OUT;
+float ALTITUDE_SETPOINT;
+float THROTTLE_KP = 0.10;
+float THROTTLE_KI = 0.0001;
+float THROTTLE_KD = 0.65;
+
+float altitude;
+float altitude_unfiltered;
+int velocity = ANGLE_TO_PWM(95);
 long dt = 100;
 bool inFlight = false;
 
 
+
+PID* yaw; PID* pitch; PID* roll; PID* throttle;
+Servo front,right,back,left;
+MPU6050 mpu;
+MPL3115A2 dps;
+Filter filter(&altitude, &altitude_unfiltered);
+
 void setup() {
     Serial.begin(115200);
+    initDPS();
     initESCs();
     initMPU();
     initPID();
 }
 
 void loop() {
-    if(millis()>35000) inFlight = true;
+    if(millis()>MPU_CALIB_TIME) inFlight = true;
     updateMPU();
+    updateDPS();
     updatePID();
     updateESC();
+}
+
+void initDPS(){
+  dps.begin();
+  dps.setModeAltimeter();
+  dps.setOversampleRate(6); // Set Oversample to the recommended 128
+  dps.enableEventFlags(); // Enable all three pressure and temp event flags
+}
+
+void updateDPS(){
+  altitude_unfiltered = dps.readAltitude();
+  filter.update();
 }
 
 
@@ -217,7 +225,10 @@ void initMPU(){
     mpu.setZGyroOffset(MPU_GZ_OFFSET);
 
     long timer = millis();
-    while(millis()-timer < MPU_CALIB_TIME) updateMPU();
+    while(millis()-timer < MPU_CALIB_TIME){
+      updateMPU();
+      updateDPS();
+    }
 }
 
 
@@ -233,15 +244,18 @@ void initPID(){
     YAW_SETPOINT = 0.0;//ypr[0];
     PITCH_SETPOINT = 0.0;//ypr[1];
     ROLL_SETPOINT = ypr[2];
+    ALTITUDE_SETPOINT = 1.0; //1 meter
 
 
     yaw = new PID(&YAW_OUT, &ypr[0], &YAW_SETPOINT, dt, YAW_KP, YAW_KI, YAW_KD);
     pitch = new PID(&PITCH_OUT, &ypr[1], &PITCH_SETPOINT, dt, PITCH_KP, PITCH_KI, PITCH_KD);
     roll = new PID(&ROLL_OUT, &ypr[2], &ROLL_SETPOINT, dt, ROLL_KP, ROLL_KI, ROLL_KD);
+    throttle = new PID(&THROTTLE_OUT, &altitude, &ALTITUDE_SETPOINT, dt, THROTTLE_KP, THROTTLE_KI, THROTTLE_KD);
 
     yaw->init();
     pitch->init();
     roll->init();
+    throttle->init();
 }
 
 void updatePID(){
@@ -249,6 +263,7 @@ void updatePID(){
     yaw->update();
     pitch->update();
     roll->update();
+    throttle->update();
 }
 
 void updateESC(){
@@ -284,13 +299,13 @@ void updateESC(){
     }
     
     
-    /*
+    
     Serial.print("f,r,b,l: ");
     Serial.print(front_new, 5); Serial.print(",");
     Serial.print(right_new, 5); Serial.print(",");
     Serial.print(back_new, 5); Serial.print(",");
     Serial.println(left_new, 5);
-    */
+    
 }
 
 
