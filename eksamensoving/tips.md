@@ -6,3 +6,6 @@ Navn Etternavn Fødselsdato
 
 Så vil fscanf(fil, "%s", person.fornavn), fscanf(fil, "%s", person.etternavn) og fscanf(fil, "%d", &person.fdato);
 lage personen for oss.
+
+###malloc
+malloc(bytes) returnerer en void pointer som kan tildeles hva som helst.
